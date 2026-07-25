@@ -42,12 +42,11 @@ pipeline {
                 dir('backend') {
                     sh '''
                         docker run --rm \
-                          --user "$(id -u):$(id -g)" \
                           -e HOME=/tmp \
                           -v "$PWD:/app" \
                           -w /app \
                           node:20-alpine \
-                          sh -c "npm ci && npm run build"
+                          sh -c "npm install && npm run build"
                     '''
                 }
             }
@@ -58,12 +57,11 @@ pipeline {
                 dir('frontend') {
                     sh '''
                         docker run --rm \
-                          --user "$(id -u):$(id -g)" \
                           -e HOME=/tmp \
                           -v "$PWD:/app" \
                           -w /app \
                           node:20-alpine \
-                          sh -c "npm ci && npm run build"
+                          sh -c "npm install && npm run build"
                     '''
                 }
             }
