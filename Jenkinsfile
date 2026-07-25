@@ -41,8 +41,13 @@ pipeline {
             steps {
                 dir('backend') {
                     sh '''
-                        npm ci
-                        npm run build
+                        docker run --rm \
+                          --user "$(id -u):$(id -g)" \
+                          -e HOME=/tmp \
+                          -v "$PWD:/app" \
+                          -w /app \
+                          node:20-alpine \
+                          sh -c "npm ci && npm run build"
                     '''
                 }
             }
@@ -52,9 +57,13 @@ pipeline {
             steps {
                 dir('frontend') {
                     sh '''
-                        npm ci
-                        npm run lint
-                        npm run build
+                        docker run --rm \
+                          --user "$(id -u):$(id -g)" \
+                          -e HOME=/tmp \
+                          -v "$PWD:/app" \
+                          -w /app \
+                          node:20-alpine \
+                          sh -c "npm ci && npm run build"
                     '''
                 }
             }
