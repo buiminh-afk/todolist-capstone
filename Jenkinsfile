@@ -41,6 +41,9 @@ pipeline {
             steps {
                 dir('backend') {
                     sh '''
+                        pwd
+                        ls -la
+                        test -f package.json || { echo "Missing package.json in backend checkout"; exit 1; }
                         docker run --rm \
                           -e HOME=/tmp \
                           -v "$PWD:/app" \
@@ -56,6 +59,9 @@ pipeline {
             steps {
                 dir('frontend') {
                     sh '''
+                        pwd
+                        ls -la
+                        test -f package.json || { echo "Missing package.json in frontend checkout"; exit 1; }
                         docker run --rm \
                           -e HOME=/tmp \
                           -v "$PWD:/app" \
