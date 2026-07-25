@@ -41,16 +41,16 @@ pipeline {
             steps {
                 dir('backend') {
                     sh '''
-                        pwd
-                        ls -la
+                        echo "Workspace: $PWD"
                         test -f package.json || { echo "Missing package.json in backend checkout"; exit 1; }
+
                         docker run --rm \
+                          --volumes-from "$HOSTNAME" \
                           -e HOME=/tmp \
                           -e npm_config_cache=/tmp/.npm \
-                          -v "$PWD:/app" \
-                          -w /app \
+                          -w "$PWD" \
                           node:20-alpine \
-                          sh -c 'npm install && npm run build'
+                          /bin/sh -lc 'npm ci && npm run build'
                     '''
                 }
             }
@@ -60,16 +60,16 @@ pipeline {
             steps {
                 dir('frontend') {
                     sh '''
-                        pwd
-                        ls -la
+                        echo "Workspace: $PWD"
                         test -f package.json || { echo "Missing package.json in frontend checkout"; exit 1; }
+
                         docker run --rm \
+                          --volumes-from "$HOSTNAME" \
                           -e HOME=/tmp \
                           -e npm_config_cache=/tmp/.npm \
-                          -v "$PWD:/app" \
-                          -w /app \
+                          -w "$PWD" \
                           node:20-alpine \
-                          sh -c 'npm install && npm run build'
+                          /bin/sh -lc 'npm ci && npm run build'
                     '''
                 }
             }
