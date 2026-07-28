@@ -98,6 +98,22 @@ pipeline {
         }
       }
     }
+
+    stage('Promote to Production') {
+      when {
+        branch 'main'
+      }
+      steps {
+        script {
+          echo "Promoting image tag ${env.IMAGE_TAG} to production"
+          build job: 'todolist-capstone-prod',
+            parameters: [
+              string(name: 'IMAGE_TAG', value: env.IMAGE_TAG)
+            ],
+            wait: false
+        }
+      }
+    }
   }
 
   post {
