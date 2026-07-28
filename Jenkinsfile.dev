@@ -12,6 +12,7 @@ pipeline {
 
   environment {
     DOCKER_BUILDKIT = '0'
+    APP_HOST = '10.0.1.178'
   }
 
   stages {
@@ -65,10 +66,6 @@ pipeline {
             credentialsId: 'application-ec2-ssh',
             keyFileVariable: 'SSH_KEY',
             usernameVariable: 'SSH_USER'
-          ),
-          string(
-            credentialsId: 'application-ec2-host',
-            variable: 'APP_HOST'
           ),
           usernamePassword(
             credentialsId: 'todo-dev-db-credentials',
