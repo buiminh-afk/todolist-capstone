@@ -30,7 +30,7 @@ server:
   http_listen_port: 9080
   grpc_listen_port: 0
 positions:
-  filename: /tmp/positions.yaml
+  filename: /var/lib/promtail/positions.yaml
 clients:
   - url: http://10.0.1.10:3100/loki/api/v1/push
 scrape_configs:
@@ -111,11 +111,14 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ${TARGET_DIR}/promtail-config.yaml:/etc/promtail/config.yml:ro
-      - ${TARGET_DIR}/promtail-positions.yaml:/tmp/positions.yaml
+      - promtail-positions:/var/lib/promtail
 
 networks:
   application-network:
     driver: bridge
+
+volumes:
+  promtail-positions:
 EOF
 
 docker compose -f "$TARGET_DIR/docker-compose.yml" pull

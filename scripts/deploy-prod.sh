@@ -65,6 +65,14 @@ fi
 
 kubectl config use-context "$KUBE_CONTEXT" >/dev/null 2>&1 || true
 
+echo "Installing ingress-nginx controller"
+kubectl apply -f \
+  https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.15.1/deploy/static/provider/kind/deploy.yaml
+kubectl wait --namespace ingress-nginx \
+  --for=condition=ready pod \
+  --selector=app.kubernetes.io/component=controller \
+  --timeout=300s
+
 # PostgreSQL is hosted on its dedicated EC2 instance. Remove workloads left by
 # older manifests, but deliberately retain any PVC so no data is destroyed.
 kubectl delete statefulset postgres -n todolist --ignore-not-found
