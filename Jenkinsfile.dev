@@ -60,17 +60,63 @@ pipeline {
 
     stage('Deploy to Application EC2 (dev)') {
       steps {
-        withCredentials([
-          sshUserPrivateKey(credentialsId: 'application-ec2-ssh', keyFileVariable: 'SSH_KEY', usernameVariable: 'SSH_USER'),
-          string(credentialsId: 'application-ec2-host', variable: 'APP_HOST'),
-          usernamePassword(credentialsId: 'todo-dev-db-credentials', usernameVariable: 'DB_USER', passwordVariable: 'DB_PASSWORD')
-        ]) {
-          sh """
-            chmod +x scripts/deploy-dev.sh
-            scp -i \"$SSH_KEY\" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null scripts/deploy-dev.sh \"$SSH_USER@$APP_HOST:/tmp/deploy-dev.sh\"
-            ssh -i \"$SSH_KEY\" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \"$SSH_USER@$APP_HOST\" \"chmod +x /tmp/deploy-dev.sh && /tmp/deploy-dev.sh /opt/todolist/dev '${env.IMAGE_TAG}' '${params.DB_HOST}' '5432' '${params.DB_NAME}' '${DB_USER}' '${DB_PASSWORD}' '${params.BACKEND_PORT}' '${params.FRONTEND_PORT}' '${params.NEXT_PUBLIC_API_URL}' '${DOCKER_USER}'\"
-          """
-        }
+          withCredentials([
+              sshUserPrivateKey(
+                  credentialsId: 'application-ec2-ssh',
+                  keyFileVariable: 'SSH_KEY',
+                  usernameVariable: 'SSH_USER'
+              ),
+              string(
+                  credentialsId: 'application-ec2-host',
+                  variable: 'APP_HOST'
+              ),
+              usernamePassword(
+                  credentialsId: 'todo-dev-db-credentials',
+                  usernameVariable: 'DB_USER',
+                  passwordVariable: 'DB_PASSWORD'
+              ),
+              usernamePassword(
+                  credentialsId: 'dockerhub-credentials',
+                  usernameVariable: 'DOCKER_USER',
+                  passwordVariable: 'DOCKER_TOKEN'
+              )
+          ]) {
+              sh '''
+                  set -eu
+
+                  echo "=== Preparing deploy script ==="
+                  test -f scripts/deploy-dev.sh
+                  chmod +x scripts/deploy-dev.sh
+
+                  echo "=== Copying deploy script to Application EC2 ==="
+                  scp \
+                    -i "$SSH_KEY" \
+                    -o StrictHostKeyChecking=no \
+                    -o UserKnownHostsFile=/dev/null \
+                    scripts/deploy-dev.sh \
+                    "$SSH_USER@$APP_HOST:/tmp/deploy-dev.sh"
+
+                  echo "=== Running dev deployment ==="
+                  ssh \
+                    -i "$SSH_KEY" \
+                    -o StrictHostKeyChecking=no \
+                    -o UserKnownHostsFile=/dev/null \
+                    "$SSH_USER@$APP_HOST" \
+                    "chmod +x /tmp/deploy-dev.sh &&
+                    /tmp/deploy-dev.sh \
+                      /opt/todolist/dev \
+                      '$IMAGE_TAG' \
+                      '$DB_HOST' \
+                      '5432' \
+                      '$DB_NAME' \
+                      '$DB_USER' \
+                      '$DB_PASSWORD' \
+                      '$BACKEND_PORT' \
+                      '$FRONTEND_PORT' \
+                      '$NEXT_PUBLIC_API_URL' \
+                      '$DOCKER_USER'"
+              '''
+          }
       }
     }
   }

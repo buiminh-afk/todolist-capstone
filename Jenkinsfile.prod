@@ -2,15 +2,40 @@ pipeline {
   agent any
 
   parameters {
-    string(name: 'IMAGE_TAG', defaultValue: '', description: 'Docker image tag to deploy')
-    string(name: 'DB_HOST', defaultValue: '127.0.0.1', description: 'PostgreSQL host reachable from the Kind cluster')
-    string(name: 'DB_NAME', defaultValue: 'todolist_prod', description: 'Database name for prod')
-    string(name: 'KUBE_CONTEXT', defaultValue: 'kind-todo-prod', description: 'kubectl context for the prod cluster')
-    string(name: 'CLUSTER_NAME', defaultValue: 'todo-prod', description: 'Kind cluster name')
+    string(
+      name: 'IMAGE_TAG',
+      defaultValue: '',
+      description: 'Image tag đã build và pass ở dev'
+    )
+
+    string(
+      name: 'DB_HOST',
+      defaultValue: '10.0.2.234',
+      description: 'Private IP/DNS của PostgreSQL EC2'
+    )
+
+    string(
+      name: 'DB_NAME',
+      defaultValue: 'todo_prod',
+      description: 'Production database name'
+    )
+
+    string(
+      name: 'KUBE_CONTEXT',
+      defaultValue: 'kind-todo-prod',
+      description: 'kubectl context'
+    )
+
+    string(
+      name: 'CLUSTER_NAME',
+      defaultValue: 'todo-prod',
+      description: 'Kind cluster name'
+    )
   }
 
   environment {
-    DOCKER_BUILDKIT = '0'
+    BACKEND_IMAGE  = 'buiminh03/vntechies-todolist-backend'
+    FRONTEND_IMAGE = 'buiminh03/vntechies-todolist-frontend'
   }
 
   stages {
@@ -19,72 +44,127 @@ pipeline {
         deleteDir()
         checkout scm
 
-        dir('backend') {
-          git branch: 'master', url: 'https://github.com/buiminh-afk/devops-bootcamp-todolist-backend-api.git'
-        }
-
-        dir('frontend') {
-          git branch: 'master', url: 'https://github.com/buiminh-afk/devops-bootcamp-todolist-frontend.git'
-        }
-
         sh '''
+          set -eu
+
           echo "=== Workspace ==="
           pwd
           find . -maxdepth 2 -type d | sort
+
+          test -f scripts/deploy-prod.sh
+          test -d k8s-prod
         '''
       }
     }
 
-    stage('Build and push images') {
+    stage('Validate Parameters') {
       steps {
-        withCredentials([
-          usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')
-        ]) {
-          script {
-            def tag = params.IMAGE_TAG?.trim() ? params.IMAGE_TAG : env.BUILD_NUMBER
-            env.IMAGE_TAG = tag
+        sh '''
+          set -eu
 
-            sh '''
-              set -e
-              echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
-              docker build -t "$DOCKER_USER/vntechies-todolist-backend:$IMAGE_TAG" ./backend
-              docker build -t "$DOCKER_USER/vntechies-todolist-frontend:$IMAGE_TAG" ./frontend
-              docker push "$DOCKER_USER/vntechies-todolist-backend:$IMAGE_TAG"
-              docker push "$DOCKER_USER/vntechies-todolist-frontend:$IMAGE_TAG"
-            '''
+          test -n "$IMAGE_TAG" || {
+            echo "ERROR: IMAGE_TAG is required"
+            exit 1
           }
-        }
+
+          test -n "$DB_HOST"
+          test -n "$DB_NAME"
+          test -n "$KUBE_CONTEXT"
+          test -n "$CLUSTER_NAME"
+
+          echo "Deploying image tag: $IMAGE_TAG"
+          echo "Database host: $DB_HOST"
+          echo "Database name: $DB_NAME"
+          echo "Kubernetes context: $KUBE_CONTEXT"
+        '''
       }
     }
 
     stage('Approval') {
       steps {
-        input message: 'Approve deployment to production on Application EC2?'
+        timeout(time: 15, unit: 'MINUTES') {
+          input message: "Deploy image ${params.IMAGE_TAG} to production?"
+        }
       }
     }
 
     stage('Deploy to Application EC2 (prod)') {
       steps {
         withCredentials([
-          sshUserPrivateKey(credentialsId: 'application-ec2-ssh', keyFileVariable: 'SSH_KEY', usernameVariable: 'SSH_USER'),
-          string(credentialsId: 'application-ec2-host', variable: 'APP_HOST'),
-          usernamePassword(credentialsId: 'todo-prod-db-credentials', usernameVariable: 'DB_USER', passwordVariable: 'DB_PASSWORD')
+          sshUserPrivateKey(
+            credentialsId: 'application-ec2-ssh',
+            keyFileVariable: 'SSH_KEY',
+            usernameVariable: 'SSH_USER'
+          ),
+
+          string(
+            credentialsId: 'application-ec2-host',
+            variable: 'APP_HOST'
+          ),
+
+          usernamePassword(
+            credentialsId: 'todo-prod-db-credentials',
+            usernameVariable: 'DB_USER',
+            passwordVariable: 'DB_PASSWORD'
+          ),
+
+          usernamePassword(
+            credentialsId: 'dockerhub-credentials',
+            usernameVariable: 'DOCKER_USER',
+            passwordVariable: 'DOCKER_PASS'
+          )
         ]) {
-          sh """
+          sh '''
+            set -eu
+
             chmod +x scripts/deploy-prod.sh
-            scp -i \"$SSH_KEY\" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null scripts/deploy-prod.sh \"$SSH_USER@$APP_HOST:/tmp/deploy-prod.sh\"
-            ssh -i \"$SSH_KEY\" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \"$SSH_USER@$APP_HOST\" \"mkdir -p /opt/todolist/prod/k8s && rm -rf /opt/todolist/prod/k8s/*\"
-            scp -i \"$SSH_KEY\" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -r ./k8s-prod/* \"$SSH_USER@$APP_HOST:/opt/todolist/prod/k8s/\"
-            ssh -i \"$SSH_KEY\" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \"$SSH_USER@$APP_HOST\" \"chmod +x /tmp/deploy-prod.sh && /tmp/deploy-prod.sh /opt/todolist/prod/k8s '${env.IMAGE_TAG}' '${params.DB_HOST}' '5432' '${params.DB_NAME}' '${DB_USER}' '${DB_PASSWORD}' '${params.KUBE_CONTEXT}' '${params.CLUSTER_NAME}' '${DOCKER_USER}'\"
-          """
+
+            echo "=== Copy deploy script ==="
+            scp \
+              -i "$SSH_KEY" \
+              -o StrictHostKeyChecking=no \
+              -o UserKnownHostsFile=/dev/null \
+              scripts/deploy-prod.sh \
+              "$SSH_USER@$APP_HOST:/tmp/deploy-prod.sh"
+
+            echo "=== Prepare remote manifests directory ==="
+            ssh \
+              -i "$SSH_KEY" \
+              -o StrictHostKeyChecking=no \
+              -o UserKnownHostsFile=/dev/null \
+              "$SSH_USER@$APP_HOST" \
+              "mkdir -p /opt/todolist/prod/k8s &&
+               rm -rf /opt/todolist/prod/k8s/*"
+
+            echo "=== Copy Kubernetes manifests ==="
+            scp \
+              -i "$SSH_KEY" \
+              -o StrictHostKeyChecking=no \
+              -o UserKnownHostsFile=/dev/null \
+              -r k8s-prod/. \
+              "$SSH_USER@$APP_HOST:/opt/todolist/prod/k8s/"
+
+            echo "=== Run production deployment ==="
+            ssh \
+              -i "$SSH_KEY" \
+              -o StrictHostKeyChecking=no \
+              -o UserKnownHostsFile=/dev/null \
+              "$SSH_USER@$APP_HOST" \
+              "chmod +x /tmp/deploy-prod.sh &&
+               /tmp/deploy-prod.sh \
+                 /opt/todolist/prod/k8s \
+                 '$IMAGE_TAG' \
+                 '$DB_HOST' \
+                 '5432' \
+                 '$DB_NAME' \
+                 '$DB_USER' \
+                 '$DB_PASSWORD' \
+                 '$KUBE_CONTEXT' \
+                 '$CLUSTER_NAME' \
+                 '$DOCKER_USER'"
+          '''
         }
       }
-    }
-  }
-
-  post {
-    always {
-      sh 'docker logout || true'
     }
   }
 }
