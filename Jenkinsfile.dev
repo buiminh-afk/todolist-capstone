@@ -3,8 +3,8 @@ pipeline {
 
   parameters {
     string(name: 'IMAGE_TAG', defaultValue: '', description: 'Docker image tag to deploy')
-    string(name: 'DB_HOST', defaultValue: '127.0.0.1', description: 'PostgreSQL host reachable from Application EC2')
-    string(name: 'DB_NAME', defaultValue: 'todolist_dev', description: 'Database name for dev')
+    string(name: 'DB_HOST', defaultValue: '10.0.2.234', description: 'PostgreSQL host reachable from Application EC2')
+    string(name: 'DB_NAME', defaultValue: 'todo_dev', description: 'Database name for dev')
     string(name: 'BACKEND_PORT', defaultValue: '5000', description: 'Host port for the backend container')
     string(name: 'FRONTEND_PORT', defaultValue: '3000', description: 'Host port for the frontend container')
     string(name: 'NEXT_PUBLIC_API_URL', defaultValue: 'http://127.0.0.1:5000/api', description: 'Frontend API URL')
