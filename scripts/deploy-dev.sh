@@ -25,6 +25,33 @@ umask 077
 
 mkdir -p "$TARGET_DIR"
 
+cat > "$TARGET_DIR/promtail-config.yaml" <<'EOF'
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+positions:
+  filename: /tmp/positions.yaml
+clients:
+  - url: http://10.0.1.10:3100/loki/api/v1/push
+scrape_configs:
+  - job_name: todolist-dev-containers
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 10s
+    relabel_configs:
+      - source_labels: [__meta_docker_container_name]
+        regex: /todolist-(backend|frontend)-dev
+        action: keep
+      - source_labels: [__meta_docker_container_name]
+        regex: /todolist-(backend|frontend)-dev
+        target_label: service
+        replacement: $1
+      - target_label: environment
+        replacement: dev
+    pipeline_stages:
+      - docker: {}
+EOF
+
 cat > "$TARGET_DIR/.env" <<EOF
 IMAGE_TAG=${IMAGE_TAG}
 DATABASE_HOST=${DB_HOST}
@@ -75,6 +102,16 @@ services:
         condition: service_healthy
     networks:
       - application-network
+
+  promtail:
+    image: grafana/promtail:3.0.0
+    container_name: todolist-promtail-dev
+    restart: unless-stopped
+    command: -config.file=/etc/promtail/config.yml
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ${TARGET_DIR}/promtail-config.yaml:/etc/promtail/config.yml:ro
+      - ${TARGET_DIR}/promtail-positions.yaml:/tmp/positions.yaml
 
 networks:
   application-network:

@@ -11,3 +11,4 @@ resources:
   - frontend/service.yaml
   # Credentials for the external PostgreSQL EC2 instance.
   - postgres/secret.yaml
+  - observability/promtail.yaml
