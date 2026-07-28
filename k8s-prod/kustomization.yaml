@@ -9,6 +9,5 @@ resources:
   - frontend/configmap.yaml
   - frontend/deployment.yaml
   - frontend/service.yaml
+  # Credentials for the external PostgreSQL EC2 instance.
   - postgres/secret.yaml
-  - postgres/service.yaml
-  - postgres/statefulset.yaml

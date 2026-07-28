@@ -64,6 +64,12 @@ if ! kind get clusters 2>/dev/null | grep -qx "$CLUSTER_NAME"; then
 fi
 
 kubectl config use-context "$KUBE_CONTEXT" >/dev/null 2>&1 || true
+
+# PostgreSQL is hosted on its dedicated EC2 instance. Remove workloads left by
+# older manifests, but deliberately retain any PVC so no data is destroyed.
+kubectl delete statefulset postgres -n todolist --ignore-not-found
+kubectl delete service postgres-service -n todolist --ignore-not-found
+
 kubectl apply -k "$TARGET_DIR"
 
 kubectl set image deployment/backend backend=${DOCKER_REPO}/vntechies-todolist-backend:${IMAGE_TAG} -n todolist
