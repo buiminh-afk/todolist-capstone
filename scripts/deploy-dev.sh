@@ -72,8 +72,19 @@ networks:
 EOF
 
 docker compose -f "$TARGET_DIR/docker-compose.yml" pull
-docker compose -f "$TARGET_DIR/docker-compose.yml" up -d --remove-orphans
-docker compose -f "$TARGET_DIR/docker-compose.yml" ps
+
+docker rm -f \
+  todolist-backend-dev \
+  todolist-frontend-dev \
+  2>/dev/null || true
+
+docker compose \
+  -f "$TARGET_DIR/docker-compose.yml" \
+  up -d --remove-orphans
+
+docker compose \
+  -f "$TARGET_DIR/docker-compose.yml" \
+  ps
 
 echo "=== Docker compose status ==="
 docker compose -f "$TARGET_DIR/docker-compose.yml" ps
