@@ -11,6 +11,7 @@ nodes:
             node-labels: "ingress-ready=true"
     extraPortMappings:
       - containerPort: 80
-        hostPort: 80
+        # Port 80 is already used on the Application EC2 host.
+        hostPort: 8081
       - containerPort: 443
-        hostPort: 443
+        hostPort: 8444
