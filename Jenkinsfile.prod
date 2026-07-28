@@ -20,11 +20,11 @@ pipeline {
         checkout scm
 
         dir('backend') {
-          git branch: 'main', url: 'https://github.com/buiminh03/devops-bootcamp-todolist-backend-api.git'
+          git branch: 'main', url: 'https://github.com/buiminh-afk/devops-bootcamp-todolist-backend-api.git'
         }
 
         dir('frontend') {
-          git branch: 'main', url: 'https://github.com/buiminh03/devops-bootcamp-todolist-frontend.git'
+          git branch: 'main', url: 'https://github.com/buiminh-afk/devops-bootcamp-todolist-frontend.git'
         }
 
         sh '''
