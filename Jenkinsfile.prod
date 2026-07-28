@@ -62,23 +62,30 @@ pipeline {
 
     stage('Validate Parameters') {
       steps {
+        script {
+          if (!params.IMAGE_TAG?.trim()) {
+            error('IMAGE_TAG is required. Enter the image tag that passed dev, for example 23.')
+          }
+        }
+
         sh '''
           set -eu
 
-          test -n "$IMAGE_TAG" || {
+          test -n "${IMAGE_TAG:-}" || {
             echo "ERROR: IMAGE_TAG is required"
             exit 1
           }
 
-          test -n "$DB_HOST"
-          test -n "$DB_NAME"
-          test -n "$KUBE_CONTEXT"
-          test -n "$CLUSTER_NAME"
+          test -n "${DB_HOST:-}"
+          test -n "${DB_NAME:-}"
+          test -n "${KUBE_CONTEXT:-}"
+          test -n "${CLUSTER_NAME:-}"
 
           echo "Deploying image tag: $IMAGE_TAG"
           echo "Database host: $DB_HOST"
           echo "Database name: $DB_NAME"
           echo "Kubernetes context: $KUBE_CONTEXT"
+          echo "Kind cluster: $CLUSTER_NAME"
         '''
       }
     }
@@ -107,7 +114,7 @@ pipeline {
           )
         ]) {
           sh '''
-            set -euxo pipefail
+            set -euo pipefail
 
             echo "=== Preparing prod deploy script ==="
             ls -l scripts/deploy-prod.sh
@@ -143,7 +150,39 @@ pipeline {
               -o StrictHostKeyChecking=no \
               -o UserKnownHostsFile=/dev/null \
               "$SSH_USER@$APP_HOST" \
-              "set -euxo pipefail; chmod +x /tmp/deploy-prod.sh; bash -x /tmp/deploy-prod.sh /opt/todolist/prod/k8s '$IMAGE_TAG' '$DB_HOST' '5432' '$DB_NAME' '$DB_USER' '$DB_PASSWORD' '$KUBE_CONTEXT' '$CLUSTER_NAME' '$DOCKER_USER'"
+              "set -euxo pipefail; chmod +x /tmp/deploy-prod.sh; bash /tmp/deploy-prod.sh /opt/todolist/prod/k8s '$IMAGE_TAG' '$DB_HOST' '5432' '$DB_NAME' '$DB_USER' '$DB_PASSWORD' '$KUBE_CONTEXT' '$CLUSTER_NAME' '$DOCKER_USER'"
+          '''
+        }
+      }
+    }
+
+    stage('Verify Production Images') {
+      steps {
+        withCredentials([
+          usernamePassword(
+            credentialsId: 'dockerhub-credentials',
+            usernameVariable: 'DOCKER_USER',
+            passwordVariable: 'DOCKER_PASS'
+          )
+        ]) {
+          sh '''
+            #!/usr/bin/env bash
+            set -euo pipefail
+
+            echo "$DOCKER_PASS" |
+              docker login -u "$DOCKER_USER" --password-stdin
+
+            echo "Verifying backend image..."
+            docker manifest inspect \
+              "$BACKEND_IMAGE:$IMAGE_TAG" >/dev/null
+
+            echo "Verifying frontend image..."
+            docker manifest inspect \
+              "$FRONTEND_IMAGE:$IMAGE_TAG" >/dev/null
+
+            echo "Both production images exist:"
+            echo "- $BACKEND_IMAGE:$IMAGE_TAG"
+            echo "- $FRONTEND_IMAGE:$IMAGE_TAG"
           '''
         }
       }
