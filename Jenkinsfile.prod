@@ -115,8 +115,10 @@ pipeline {
           )
         ]) {
           sh '''
-            set -eu
+            set -euxo pipefail
 
+            echo "=== Preparing prod deploy script ==="
+            ls -l scripts/deploy-prod.sh
             chmod +x scripts/deploy-prod.sh
 
             echo "=== Copy deploy script ==="
@@ -133,8 +135,7 @@ pipeline {
               -o StrictHostKeyChecking=no \
               -o UserKnownHostsFile=/dev/null \
               "$SSH_USER@$APP_HOST" \
-              "mkdir -p /opt/todolist/prod/k8s &&
-               rm -rf /opt/todolist/prod/k8s/*"
+              "set -euxo pipefail; mkdir -p /opt/todolist/prod/k8s && rm -rf /opt/todolist/prod/k8s/*"
 
             echo "=== Copy Kubernetes manifests ==="
             scp \
@@ -150,18 +151,7 @@ pipeline {
               -o StrictHostKeyChecking=no \
               -o UserKnownHostsFile=/dev/null \
               "$SSH_USER@$APP_HOST" \
-              "chmod +x /tmp/deploy-prod.sh &&
-               /tmp/deploy-prod.sh \
-                 /opt/todolist/prod/k8s \
-                 '$IMAGE_TAG' \
-                 '$DB_HOST' \
-                 '5432' \
-                 '$DB_NAME' \
-                 '$DB_USER' \
-                 '$DB_PASSWORD' \
-                 '$KUBE_CONTEXT' \
-                 '$CLUSTER_NAME' \
-                 '$DOCKER_USER'"
+              "set -euxo pipefail; chmod +x /tmp/deploy-prod.sh; bash -x /tmp/deploy-prod.sh /opt/todolist/prod/k8s '$IMAGE_TAG' '$DB_HOST' '5432' '$DB_NAME' '$DB_USER' '$DB_PASSWORD' '$KUBE_CONTEXT' '$CLUSTER_NAME' '$DOCKER_USER'"
           '''
         }
       }
