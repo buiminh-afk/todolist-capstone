@@ -99,6 +99,21 @@ echo "=== Backend health ==="
 curl --fail --retry 10 --retry-delay 3 \
   http://127.0.0.1:"$BACKEND_PORT"/health
 
-echo "=== Frontend health ==="
-curl --fail --retry 10 --retry-delay 3 \
-  http://127.0.0.1:"$FRONTEND_PORT"/
+echo "=== Waiting for frontend ==="
+
+for i in $(seq 1 20); do
+  if curl -fsS http://127.0.0.1:"$FRONTEND_PORT"/ >/dev/null; then
+    echo "Frontend is ready"
+    break
+  fi
+
+  echo "Frontend not ready yet: attempt $i/20"
+  docker logs --tail=30 todolist-frontend-dev || true
+  sleep 3
+
+  if [ "$i" -eq 20 ]; then
+    echo "Frontend failed readiness check"
+    docker inspect todolist-frontend-dev
+    exit 1
+  fi
+done
