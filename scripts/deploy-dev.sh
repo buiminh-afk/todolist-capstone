@@ -74,3 +74,20 @@ EOF
 docker compose -f "$TARGET_DIR/docker-compose.yml" pull
 docker compose -f "$TARGET_DIR/docker-compose.yml" up -d --remove-orphans
 docker compose -f "$TARGET_DIR/docker-compose.yml" ps
+
+echo "=== Docker compose status ==="
+docker compose -f "$TARGET_DIR/docker-compose.yml" ps
+
+echo "=== Backend logs ==="
+docker logs --tail=100 todolist-backend-dev || true
+
+echo "=== Frontend logs ==="
+docker logs --tail=100 todolist-frontend-dev || true
+
+echo "=== Backend health ==="
+curl --fail --retry 10 --retry-delay 3 \
+  http://127.0.0.1:"$BACKEND_PORT"/health
+
+echo "=== Frontend health ==="
+curl --fail --retry 10 --retry-delay 3 \
+  http://127.0.0.1:"$FRONTEND_PORT"/

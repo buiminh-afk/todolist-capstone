@@ -60,52 +60,103 @@ pipeline {
 
     stage('Deploy to Application EC2 (dev)') {
       steps {
-          withCredentials([
-              sshUserPrivateKey(
-                  credentialsId: 'application-ec2-ssh',
-                  keyFileVariable: 'SSH_KEY',
-                  usernameVariable: 'SSH_USER'
-              ),
-              string(
-                  credentialsId: 'application-ec2-host',
-                  variable: 'APP_HOST'
-              ),
-              usernamePassword(
-                  credentialsId: 'todo-dev-db-credentials',
-                  usernameVariable: 'DB_USER',
-                  passwordVariable: 'DB_PASSWORD'
-              ),
-              usernamePassword(
-                  credentialsId: 'dockerhub-credentials',
-                  usernameVariable: 'DOCKER_USER',
-                  passwordVariable: 'DOCKER_TOKEN'
-              )
-          ]) {
-              sh '''
-                  set -euxo pipefail
+        withCredentials([
+          sshUserPrivateKey(
+            credentialsId: 'application-ec2-ssh',
+            keyFileVariable: 'SSH_KEY',
+            usernameVariable: 'SSH_USER'
+          ),
+          string(
+            credentialsId: 'application-ec2-host',
+            variable: 'APP_HOST'
+          ),
+          usernamePassword(
+            credentialsId: 'todo-dev-db-credentials',
+            usernameVariable: 'DB_USER',
+            passwordVariable: 'DB_PASSWORD'
+          ),
+          usernamePassword(
+            credentialsId: 'dockerhub-credentials',
+            usernameVariable: 'DOCKER_USER',
+            passwordVariable: 'DOCKER_TOKEN'
+          )
+        ]) {
+          sh '''
+    #!/usr/bin/env bash
+    set -euxo pipefail
 
-                  echo "=== Preparing deploy script ==="
-                  test -f scripts/deploy-dev.sh
-                  ls -l scripts/deploy-dev.sh
-                  chmod +x scripts/deploy-dev.sh
+    echo "=== Preparing deploy script ==="
+    pwd
+    ls -la
+    ls -la scripts/
 
-                  echo "=== Copying deploy script to Application EC2 ==="
-                  scp \
-                    -i "$SSH_KEY" \
-                    -o StrictHostKeyChecking=no \
-                    -o UserKnownHostsFile=/dev/null \
-                    scripts/deploy-dev.sh \
-                    "$SSH_USER@$APP_HOST:/tmp/deploy-dev.sh"
+    test -f scripts/deploy-dev.sh
+    chmod +x scripts/deploy-dev.sh
 
-                  echo "=== Running dev deployment on remote host ==="
-                  ssh \
-                    -i "$SSH_KEY" \
-                    -o StrictHostKeyChecking=no \
-                    -o UserKnownHostsFile=/dev/null \
-                    "$SSH_USER@$APP_HOST" \
-                    "set -euxo pipefail; echo 'Remote host:'; hostname; chmod +x /tmp/deploy-dev.sh; bash -x /tmp/deploy-dev.sh /opt/todolist/dev '$IMAGE_TAG' '$DB_HOST' '5432' '$DB_NAME' '$DB_USER' '$DB_PASSWORD' '$BACKEND_PORT' '$FRONTEND_PORT' '$NEXT_PUBLIC_API_URL' '$DOCKER_USER'"
-              '''
-          }
+    echo "=== Testing SSH connection ==="
+    ssh \
+      -i "$SSH_KEY" \
+      -o StrictHostKeyChecking=no \
+      -o UserKnownHostsFile=/dev/null \
+      "$SSH_USER@$APP_HOST" \
+      'hostname && whoami && docker --version && docker compose version'
+
+    echo "=== Copying deploy script ==="
+    scp \
+      -i "$SSH_KEY" \
+      -o StrictHostKeyChecking=no \
+      -o UserKnownHostsFile=/dev/null \
+      scripts/deploy-dev.sh \
+      "$SSH_USER@$APP_HOST:/tmp/deploy-dev.sh"
+
+    echo "=== Running remote deployment ==="
+    ssh \
+      -i "$SSH_KEY" \
+      -o StrictHostKeyChecking=no \
+      -o UserKnownHostsFile=/dev/null \
+      "$SSH_USER@$APP_HOST" \
+      bash -s -- \
+        "$IMAGE_TAG" \
+        "$DB_HOST" \
+        "$DB_NAME" \
+        "$DB_USER" \
+        "$DB_PASSWORD" \
+        "$BACKEND_PORT" \
+        "$FRONTEND_PORT" \
+        "$NEXT_PUBLIC_API_URL" \
+        "$DOCKER_USER" <<'REMOTE'
+    set -euxo pipefail
+
+    IMAGE_TAG="$1"
+    DB_HOST="$2"
+    DB_NAME="$3"
+    DB_USER="$4"
+    DB_PASSWORD="$5"
+    BACKEND_PORT="$6"
+    FRONTEND_PORT="$7"
+    NEXT_PUBLIC_API_URL="$8"
+    DOCKER_USER="$9"
+
+    hostname
+    whoami
+
+    chmod +x /tmp/deploy-dev.sh
+
+    bash -x /tmp/deploy-dev.sh \
+      /opt/todolist/dev \
+      "$IMAGE_TAG" \
+      "$DB_HOST" \
+      5432 \
+      "$DB_NAME" \
+      "$DB_USER" \
+      "$DB_PASSWORD" \
+      "$BACKEND_PORT" \
+      "$FRONTEND_PORT" \
+      "$NEXT_PUBLIC_API_URL" \
+      "$DOCKER_USER"
+    REMOTE
+          '''
+        }
       }
     }
   }
