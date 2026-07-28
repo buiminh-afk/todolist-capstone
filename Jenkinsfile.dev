@@ -11,7 +11,7 @@ pipeline {
   }
 
   environment {
-    DOCKER_BUILDKIT = '1'
+    DOCKER_BUILDKIT = '0'
   }
 
   stages {
@@ -30,13 +30,13 @@ pipeline {
             def tag = params.IMAGE_TAG?.trim() ? params.IMAGE_TAG : env.BUILD_NUMBER
             env.IMAGE_TAG = tag
 
-            sh """
+            sh '''
               echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
-              docker build -t ${DOCKER_USER}/vntechies-todolist-backend:${tag} ./devops-bootcamp-todolist-backend-api
-              docker build -t ${DOCKER_USER}/vntechies-todolist-frontend:${tag} --build-arg NEXT_PUBLIC_API_URL=http://127.0.0.1:5000/api ./devops-bootcamp-todolist-frontend
-              docker push ${DOCKER_USER}/vntechies-todolist-backend:${tag}
-              docker push ${DOCKER_USER}/vntechies-todolist-frontend:${tag}
-            """
+              docker build -t "$DOCKER_USER/vntechies-todolist-backend:$IMAGE_TAG" ./devops-bootcamp-todolist-backend-api
+              docker build -t "$DOCKER_USER/vntechies-todolist-frontend:$IMAGE_TAG" --build-arg NEXT_PUBLIC_API_URL=http://127.0.0.1:5000/api ./devops-bootcamp-todolist-frontend
+              docker push "$DOCKER_USER/vntechies-todolist-backend:$IMAGE_TAG"
+              docker push "$DOCKER_USER/vntechies-todolist-frontend:$IMAGE_TAG"
+            '''
           }
         }
       }
