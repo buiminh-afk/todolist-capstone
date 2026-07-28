@@ -13,6 +13,8 @@ pipeline {
   environment {
     DOCKER_BUILDKIT = '0'
     APP_HOST = '10.0.1.178'
+    DB_USER = 'todo_dev_user'
+    DB_PASSWORD = 'DevStrongPassword123!'
   }
 
   stages {
@@ -66,11 +68,6 @@ pipeline {
             credentialsId: 'application-ec2-ssh',
             keyFileVariable: 'SSH_KEY',
             usernameVariable: 'SSH_USER'
-          ),
-          usernamePassword(
-            credentialsId: 'todo-dev-db-credentials',
-            usernameVariable: 'DB_USER',
-            passwordVariable: 'DB_PASSWORD'
           ),
           usernamePassword(
             credentialsId: 'dockerhub-credentials',

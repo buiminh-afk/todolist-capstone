@@ -36,6 +36,9 @@ pipeline {
   environment {
     BACKEND_IMAGE  = 'buiminh03/vntechies-todolist-backend'
     FRONTEND_IMAGE = 'buiminh03/vntechies-todolist-frontend'
+    APP_HOST = '10.0.1.178'
+    DB_USER = 'todo_prod_user'
+    DB_PASSWORD = 'ProdStrongPassword123!'
   }
 
   stages {
@@ -95,17 +98,6 @@ pipeline {
             credentialsId: 'application-ec2-ssh',
             keyFileVariable: 'SSH_KEY',
             usernameVariable: 'SSH_USER'
-          ),
-
-          string(
-            credentialsId: 'application-ec2-host',
-            variable: 'APP_HOST'
-          ),
-
-          usernamePassword(
-            credentialsId: 'todo-prod-db-credentials',
-            usernameVariable: 'DB_USER',
-            passwordVariable: 'DB_PASSWORD'
           ),
 
           usernamePassword(
