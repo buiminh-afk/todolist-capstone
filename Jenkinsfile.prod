@@ -1,0 +1,74 @@
+pipeline {
+  agent any
+
+  parameters {
+    string(name: 'IMAGE_TAG', defaultValue: '', description: 'Docker image tag to deploy')
+    string(name: 'DB_HOST', defaultValue: '127.0.0.1', description: 'PostgreSQL host reachable from the Kind cluster')
+    string(name: 'DB_NAME', defaultValue: 'todolist_prod', description: 'Database name for prod')
+    string(name: 'KUBE_CONTEXT', defaultValue: 'kind-todo-prod', description: 'kubectl context for the prod cluster')
+    string(name: 'CLUSTER_NAME', defaultValue: 'todo-prod', description: 'Kind cluster name')
+  }
+
+  environment {
+    DOCKER_BUILDKIT = '1'
+  }
+
+  stages {
+    stage('Checkout') {
+      steps {
+        checkout scm
+      }
+    }
+
+    stage('Build and push images') {
+      steps {
+        withCredentials([
+          usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')
+        ]) {
+          script {
+            def tag = params.IMAGE_TAG?.trim() ? params.IMAGE_TAG : env.BUILD_NUMBER
+            env.IMAGE_TAG = tag
+
+            sh """
+              echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+              docker build -t ${DOCKER_USER}/vntechies-todolist-backend:${tag} ./devops-bootcamp-todolist-backend-api
+              docker build -t ${DOCKER_USER}/vntechies-todolist-frontend:${tag} ./devops-bootcamp-todolist-frontend
+              docker push ${DOCKER_USER}/vntechies-todolist-backend:${tag}
+              docker push ${DOCKER_USER}/vntechies-todolist-frontend:${tag}
+            """
+          }
+        }
+      }
+    }
+
+    stage('Approval') {
+      steps {
+        input message: 'Approve deployment to production on Application EC2?'
+      }
+    }
+
+    stage('Deploy to Application EC2 (prod)') {
+      steps {
+        withCredentials([
+          sshUserPrivateKey(credentialsId: 'application-ec2-ssh', keyFileVariable: 'SSH_KEY', usernameVariable: 'SSH_USER'),
+          string(credentialsId: 'application-ec2-host', variable: 'APP_HOST'),
+          usernamePassword(credentialsId: 'todo-prod-db-credentials', usernameVariable: 'DB_USER', passwordVariable: 'DB_PASSWORD')
+        ]) {
+          sh """
+            chmod +x scripts/deploy-prod.sh
+            scp -i \"$SSH_KEY\" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null scripts/deploy-prod.sh \"$SSH_USER@$APP_HOST:/tmp/deploy-prod.sh\"
+            ssh -i \"$SSH_KEY\" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \"$SSH_USER@$APP_HOST\" \"mkdir -p /opt/todolist/prod/k8s && rm -rf /opt/todolist/prod/k8s/*\"
+            scp -i \"$SSH_KEY\" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -r ./k8s-prod/* \"$SSH_USER@$APP_HOST:/opt/todolist/prod/k8s/\"
+            ssh -i \"$SSH_KEY\" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \"$SSH_USER@$APP_HOST\" \"chmod +x /tmp/deploy-prod.sh && /tmp/deploy-prod.sh /opt/todolist/prod/k8s '${env.IMAGE_TAG}' '${params.DB_HOST}' '5432' '${params.DB_NAME}' '${DB_USER}' '${DB_PASSWORD}' '${params.KUBE_CONTEXT}' '${params.CLUSTER_NAME}' '${DOCKER_USER}'\"
+          """
+        }
+      }
+    }
+  }
+
+  post {
+    always {
+      sh 'docker logout || true'
+    }
+  }
+}

@@ -1,0 +1,67 @@
+pipeline {
+  agent any
+
+  parameters {
+    string(name: 'IMAGE_TAG', defaultValue: '', description: 'Docker image tag to deploy')
+    string(name: 'DB_HOST', defaultValue: '127.0.0.1', description: 'PostgreSQL host reachable from Application EC2')
+    string(name: 'DB_NAME', defaultValue: 'todolist_dev', description: 'Database name for dev')
+    string(name: 'BACKEND_PORT', defaultValue: '5000', description: 'Host port for the backend container')
+    string(name: 'FRONTEND_PORT', defaultValue: '3000', description: 'Host port for the frontend container')
+    string(name: 'NEXT_PUBLIC_API_URL', defaultValue: 'http://127.0.0.1:5000/api', description: 'Frontend API URL')
+  }
+
+  environment {
+    DOCKER_BUILDKIT = '1'
+  }
+
+  stages {
+    stage('Checkout') {
+      steps {
+        checkout scm
+      }
+    }
+
+    stage('Build and push images') {
+      steps {
+        withCredentials([
+          usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')
+        ]) {
+          script {
+            def tag = params.IMAGE_TAG?.trim() ? params.IMAGE_TAG : env.BUILD_NUMBER
+            env.IMAGE_TAG = tag
+
+            sh """
+              echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+              docker build -t ${DOCKER_USER}/vntechies-todolist-backend:${tag} ./devops-bootcamp-todolist-backend-api
+              docker build -t ${DOCKER_USER}/vntechies-todolist-frontend:${tag} --build-arg NEXT_PUBLIC_API_URL=http://127.0.0.1:5000/api ./devops-bootcamp-todolist-frontend
+              docker push ${DOCKER_USER}/vntechies-todolist-backend:${tag}
+              docker push ${DOCKER_USER}/vntechies-todolist-frontend:${tag}
+            """
+          }
+        }
+      }
+    }
+
+    stage('Deploy to Application EC2 (dev)') {
+      steps {
+        withCredentials([
+          sshUserPrivateKey(credentialsId: 'application-ec2-ssh', keyFileVariable: 'SSH_KEY', usernameVariable: 'SSH_USER'),
+          string(credentialsId: 'application-ec2-host', variable: 'APP_HOST'),
+          usernamePassword(credentialsId: 'todo-dev-db-credentials', usernameVariable: 'DB_USER', passwordVariable: 'DB_PASSWORD')
+        ]) {
+          sh """
+            chmod +x scripts/deploy-dev.sh
+            scp -i \"$SSH_KEY\" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null scripts/deploy-dev.sh \"$SSH_USER@$APP_HOST:/tmp/deploy-dev.sh\"
+            ssh -i \"$SSH_KEY\" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \"$SSH_USER@$APP_HOST\" \"chmod +x /tmp/deploy-dev.sh && /tmp/deploy-dev.sh /opt/todolist/dev '${env.IMAGE_TAG}' '${params.DB_HOST}' '5432' '${params.DB_NAME}' '${DB_USER}' '${DB_PASSWORD}' '${params.BACKEND_PORT}' '${params.FRONTEND_PORT}' '${params.NEXT_PUBLIC_API_URL}' '${DOCKER_USER}'\"
+          """
+        }
+      }
+    }
+  }
+
+  post {
+    always {
+      sh 'docker logout || true'
+    }
+  }
+}
