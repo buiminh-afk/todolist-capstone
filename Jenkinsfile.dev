@@ -17,7 +17,22 @@ pipeline {
   stages {
     stage('Checkout') {
       steps {
+        deleteDir()
         checkout scm
+
+        dir('backend') {
+          git branch: 'main', url: 'https://github.com/buiminh03/devops-bootcamp-todolist-backend-api.git'
+        }
+
+        dir('frontend') {
+          git branch: 'main', url: 'https://github.com/buiminh03/devops-bootcamp-todolist-frontend.git'
+        }
+
+        sh '''
+          echo "=== Workspace ==="
+          pwd
+          find . -maxdepth 2 -type d | sort
+        '''
       }
     }
 
@@ -31,9 +46,10 @@ pipeline {
             env.IMAGE_TAG = tag
 
             sh '''
+              set -e
               echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
-              docker build -t "$DOCKER_USER/vntechies-todolist-backend:$IMAGE_TAG" ./devops-bootcamp-todolist-backend-api
-              docker build -t "$DOCKER_USER/vntechies-todolist-frontend:$IMAGE_TAG" --build-arg NEXT_PUBLIC_API_URL=http://127.0.0.1:5000/api ./devops-bootcamp-todolist-frontend
+              docker build -t "$DOCKER_USER/vntechies-todolist-backend:$IMAGE_TAG" ./backend
+              docker build -t "$DOCKER_USER/vntechies-todolist-frontend:$IMAGE_TAG" --build-arg NEXT_PUBLIC_API_URL=http://127.0.0.1:5000/api ./frontend
               docker push "$DOCKER_USER/vntechies-todolist-backend:$IMAGE_TAG"
               docker push "$DOCKER_USER/vntechies-todolist-frontend:$IMAGE_TAG"
             '''
