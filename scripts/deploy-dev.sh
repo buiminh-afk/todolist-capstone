@@ -7,11 +7,21 @@ DB_HOST="${3:-127.0.0.1}"
 DB_PORT="${4:-5432}"
 DB_NAME="${5:-todolist_dev}"
 DB_USER="${6:-todo_dev_user}"
-DB_PASSWORD="${7:-}"
+# The password is supplied as argument seven for local use, or through the
+# environment by the Jenkins pipeline so it never appears in an SSH command.
+DB_PASSWORD="${7:-${DB_PASSWORD:-}}"
 BACKEND_PORT="${8:-5000}"
 FRONTEND_PORT="${9:-3000}"
 NEXT_PUBLIC_API_URL="${10:-http://127.0.0.1:5000/api}"
 DOCKER_REPO="${11:-buiminh03}"
+
+if [[ -z "$DB_PASSWORD" ]]; then
+  echo "DB password is required"
+  exit 1
+fi
+
+# Files generated below contain the database password.
+umask 077
 
 mkdir -p "$TARGET_DIR"
 

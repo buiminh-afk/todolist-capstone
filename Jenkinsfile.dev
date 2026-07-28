@@ -14,7 +14,6 @@ pipeline {
     DOCKER_BUILDKIT = '0'
     APP_HOST = '10.0.1.178'
     DB_USER = 'todo_dev_user'
-    DB_PASSWORD = 'DevStrongPassword123!'
   }
 
   stages {
@@ -45,7 +44,10 @@ pipeline {
           usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')
         ]) {
           script {
-            def tag = params.IMAGE_TAG?.trim() ? params.IMAGE_TAG : env.BUILD_NUMBER
+            def tag = params.IMAGE_TAG?.trim() ? params.IMAGE_TAG : sh(
+              script: 'git -C backend rev-parse --short HEAD',
+              returnStdout: true
+            ).trim()
             env.IMAGE_TAG = tag
 
             sh '''
@@ -73,10 +75,16 @@ pipeline {
             credentialsId: 'dockerhub-credentials',
             usernameVariable: 'DOCKER_USER',
             passwordVariable: 'DOCKER_TOKEN'
+          ),
+          string(
+            credentialsId: 'dev-postgres-password',
+            variable: 'DB_PASSWORD'
           )
         ]) {
           sh '''
-    set -euxo pipefail
+    #!/usr/bin/env bash
+    set +x
+    set -euo pipefail
 
     echo "=== Preparing deploy script ==="
     pwd
@@ -93,7 +101,9 @@ pipeline {
     scp -i "$SSH_KEY" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null scripts/deploy-dev.sh "$SSH_USER@$APP_HOST:/tmp/deploy-dev.sh"
 
     echo "=== Running remote deployment ==="
-    ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$SSH_USER@$APP_HOST" "set -euxo pipefail; echo 'Remote host:'; hostname; whoami; chmod +x /tmp/deploy-dev.sh; bash -x /tmp/deploy-dev.sh /opt/todolist/dev '$IMAGE_TAG' '$DB_HOST' 5432 '$DB_NAME' '$DB_USER' '$DB_PASSWORD' '$BACKEND_PORT' '$FRONTEND_PORT' '$NEXT_PUBLIC_API_URL' '$DOCKER_USER'"
+    # Send the database password over SSH standard input so it is not present
+    # in Jenkins logs or the remote command line.
+    printf '%s' "$DB_PASSWORD" | ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$SSH_USER@$APP_HOST" "set -euo pipefail; DB_PASSWORD=\$(cat); export DB_PASSWORD; echo 'Remote host:'; hostname; whoami; chmod +x /tmp/deploy-dev.sh; bash /tmp/deploy-dev.sh /opt/todolist/dev '$IMAGE_TAG' '$DB_HOST' 5432 '$DB_NAME' '$DB_USER' '' '$BACKEND_PORT' '$FRONTEND_PORT' '$NEXT_PUBLIC_API_URL' '$DOCKER_USER'"
           '''
         }
       }

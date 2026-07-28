@@ -38,7 +38,6 @@ pipeline {
     FRONTEND_IMAGE = 'buiminh03/vntechies-todolist-frontend'
     APP_HOST = '10.0.1.178'
     DB_USER = 'todo_prod_user'
-    DB_PASSWORD = 'ProdStrongPassword123!'
   }
 
   stages {
@@ -48,14 +47,24 @@ pipeline {
         checkout scm
 
         sh '''
+          #!/usr/bin/env bash
           set -eu
 
           echo "=== Workspace ==="
           pwd
-          find . -maxdepth 2 -type d | sort
 
-          test -f scripts/deploy-prod.sh
-          test -d k8s-prod
+          echo "=== Kubernetes production files ==="
+          find k8s-prod -maxdepth 3 -type f -print | sort
+
+          test -f scripts/deploy-prod.sh || {
+            echo "ERROR: scripts/deploy-prod.sh not found"
+            exit 1
+          }
+
+          test -f k8s-prod/kind-config.yaml || {
+            echo "ERROR: k8s-prod/kind-config.yaml not found"
+            exit 1
+          }
         '''
       }
     }
@@ -111,9 +120,16 @@ pipeline {
             credentialsId: 'dockerhub-credentials',
             usernameVariable: 'DOCKER_USER',
             passwordVariable: 'DOCKER_PASS'
+          ),
+
+          string(
+            credentialsId: 'prod-postgres-password',
+            variable: 'DB_PASSWORD'
           )
         ]) {
           sh '''
+            #!/usr/bin/env bash
+            set +x
             set -euo pipefail
 
             echo "=== Preparing prod deploy script ==="
@@ -134,7 +150,9 @@ pipeline {
               -o StrictHostKeyChecking=no \
               -o UserKnownHostsFile=/dev/null \
               "$SSH_USER@$APP_HOST" \
-              "set -euxo pipefail; mkdir -p /opt/todolist/prod/k8s && rm -rf /opt/todolist/prod/k8s/*"
+              'set -euo pipefail
+               mkdir -p /opt/todolist/prod/k8s
+               find /opt/todolist/prod/k8s -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +'
 
             echo "=== Copy Kubernetes manifests ==="
             scp \
@@ -144,13 +162,29 @@ pipeline {
               -r k8s-prod/. \
               "$SSH_USER@$APP_HOST:/opt/todolist/prod/k8s/"
 
-            echo "=== Run production deployment ==="
+            echo "=== Verify copied manifests ==="
             ssh \
               -i "$SSH_KEY" \
               -o StrictHostKeyChecking=no \
               -o UserKnownHostsFile=/dev/null \
               "$SSH_USER@$APP_HOST" \
-              "set -euxo pipefail; chmod +x /tmp/deploy-prod.sh; bash /tmp/deploy-prod.sh /opt/todolist/prod/k8s '$IMAGE_TAG' '$DB_HOST' '5432' '$DB_NAME' '$DB_USER' '$DB_PASSWORD' '$KUBE_CONTEXT' '$CLUSTER_NAME' '$DOCKER_USER'"
+              'set -euo pipefail
+               echo "Files copied to remote:"
+               find /opt/todolist/prod/k8s -maxdepth 3 -type f -print | sort
+               test -f /opt/todolist/prod/k8s/kind-config.yaml || {
+                 echo "ERROR: kind-config.yaml was not copied"
+                 exit 1
+               }'
+
+            echo "=== Run production deployment ==="
+            # Send the database password over SSH standard input. It must not be
+            # embedded in the SSH command line or exposed by shell tracing.
+            printf '%s' "$DB_PASSWORD" | ssh \
+              -i "$SSH_KEY" \
+              -o StrictHostKeyChecking=no \
+              -o UserKnownHostsFile=/dev/null \
+              "$SSH_USER@$APP_HOST" \
+              "set -euo pipefail; DB_PASSWORD=\$(cat); export DB_PASSWORD; chmod +x /tmp/deploy-prod.sh; bash /tmp/deploy-prod.sh /opt/todolist/prod/k8s '$IMAGE_TAG' '$DB_HOST' '5432' '$DB_NAME' '$DB_USER' '' '$KUBE_CONTEXT' '$CLUSTER_NAME' '$DOCKER_USER'"
           '''
         }
       }

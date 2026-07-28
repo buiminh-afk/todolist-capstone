@@ -7,10 +7,17 @@ DB_HOST="${3:-127.0.0.1}"
 DB_PORT="${4:-5432}"
 DB_NAME="${5:-todolist_prod}"
 DB_USER="${6:-todo_prod_user}"
-DB_PASSWORD="${7:-}"
+# The password is supplied as argument seven for local use, or through the
+# environment by the production pipeline so it never appears in an SSH command.
+DB_PASSWORD="${7:-${DB_PASSWORD:-}}"
 KUBE_CONTEXT="${8:-kind-todo-prod}"
 CLUSTER_NAME="${9:-todo-prod}"
 DOCKER_REPO="${10:-buiminh03}"
+
+if [[ -z "$DB_PASSWORD" ]]; then
+  echo "DB password is required"
+  exit 1
+fi
 
 mkdir -p "$TARGET_DIR/postgres"
 
